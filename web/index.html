@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StockPulse — Inventory Management System (Java JDBC + MySQL)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Toast notification container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Top Navigation Bar -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">SP</div>
+        <div>
+          <span class="brand-name">StockPulse</span>
+          <span class="brand-sub">Core Java · JDBC · MySQL</span>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div id="db-status-pill" class="status-pill status-checking" title="Live MySQL JDBC Connection Status">
+          <span class="dot"></span>
+          <span id="db-status-text">Checking MySQL...</span>
+        </div>
+
+        <div id="user-controls" class="user-controls hidden">
+          <div class="user-badge">
+            <span id="user-display-name" class="user-name">User</span>
+            <span id="user-display-handle" class="user-handle">@user</span>
+          </div>
+          <button id="refresh-btn" class="btn btn-secondary btn-sm" type="button">Refresh</button>
+          <button id="logout-btn" class="btn btn-outline-danger btn-sm" type="button">Logout</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Authentication View (Login & Registration) -->
+  <main id="auth-view" class="auth-wrapper">
+    <section class="auth-card">
+      <div class="auth-header">
+        <h1>Welcome to StockPulse</h1>
+        <p>Sign in or register an account to manage inventory records stored in MySQL via Java JDBC.</p>
+      </div>
+
+      <div class="auth-tabs" role="tablist">
+        <button id="tab-login" class="auth-tab active" type="button" role="tab" aria-selected="true">Login</button>
+        <button id="tab-register" class="auth-tab" type="button" role="tab" aria-selected="false">Register</button>
+      </div>
+
+      <div id="auth-alert" class="alert hidden" role="alert"></div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="auth-form">
+        <div class="form-group">
+          <label for="login-identifier">Username or Email</label>
+          <input id="login-identifier" type="text" placeholder="e.g. john_doe or john@example.com" required autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" placeholder="Enter your password" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+      </form>
+
+      <!-- Registration Form -->
+      <form id="register-form" class="auth-form hidden">
+        <div class="form-group">
+          <label for="reg-fullname">Full Name</label>
+          <input id="reg-fullname" type="text" placeholder="e.g. Priya Sharma" required />
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="reg-username">Username</label>
+            <input id="reg-username" type="text" placeholder="e.g. priya_s" required autocomplete="username" />
+          </div>
+          <div class="form-group">
+            <label for="reg-email">Email</label>
+            <input id="reg-email" type="email" placeholder="priya@example.com" required autocomplete="email" />
+          </div>
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="reg-password">Password</label>
+            <input id="reg-password" type="password" placeholder="Min 4 characters" minlength="4" required autocomplete="new-password" />
+          </div>
+          <div class="form-group">
+            <label for="reg-confirm">Confirm Password</label>
+            <input id="reg-confirm" type="password" placeholder="Re-enter password" minlength="4" required autocomplete="new-password" />
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+      </form>
+    </section>
+  </main>
+
+  <!-- Dashboard & CRUD Workspace View -->
+  <main id="dashboard-view" class="dashboard-wrapper hidden">
+    <!-- KPI Summary Cards -->
+    <section class="kpi-grid" aria-label="Inventory Dashboard Summary">
+      <article class="kpi-card">
+        <span class="kpi-label">Total Products</span>
+        <strong id="kpi-total-products" class="kpi-value">0</strong>
+        <span class="kpi-foot">Active SKUs in MySQL</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Total Units in Stock</span>
+        <strong id="kpi-total-units" class="kpi-value">0</strong>
+        <span class="kpi-foot">Combined warehouse quantity</span>
+      </article>
+      <article class="kpi-card">
+        <span class="kpi-label">Total Inventory Value</span>
+        <strong id="kpi-total-value" class="kpi-value">$0.00</strong>
+        <span class="kpi-foot">Sum of quantity &times; unit price</span>
+      </article>
+      <article class="kpi-card kpi-card-warn">
+        <span class="kpi-label">Stock Alerts</span>
+        <strong id="kpi-alerts" class="kpi-value">0</strong>
+        <span id="kpi-alerts-detail" class="kpi-foot">0 low stock &middot; 0 out of stock</span>
+      </article>
+    </section>
+
+    <!-- Main Two-Column Grid: Form + Category Summary on left, Table on right -->
+    <section class="workspace-grid">
+      <div class="left-column">
+        <!-- Product Insert / Update Form -->
+        <div class="panel">
+          <div class="panel-header">
+            <h2 id="form-title">Add New Product</h2>
+            <span id="form-mode-badge" class="mode-badge">INSERT</span>
+          </div>
+
+          <form id="product-form" class="product-form">
+            <input type="hidden" id="product-id" value="" />
+
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="prod-sku">SKU Code *</label>
+                <input id="prod-sku" type="text" placeholder="e.g. ELEC-105" required maxlength="40" />
+              </div>
+              <div class="form-group">
+                <label for="prod-category">Category *</label>
+                <select id="prod-category" required>
+                  <option value="">Select category...</option>
+                  <option value="Electronics">Electronics</option>
+                  <option value="Office Supplies">Office Supplies</option>
+                  <option value="Furniture">Furniture</option>
+                  <option value="Networking">Networking</option>
+                  <option value="Accessories">Accessories</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="prod-name">Product Name *</label>
+              <input id="prod-name" type="text" placeholder="e.g. 27-inch 4K Monitor" required maxlength="120" />
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-group">
+                <label for="prod-quantity">Quantity *</label>
+                <input id="prod-quantity" type="number" min="0" step="1" placeholder="0" required />
+              </div>
+              <div class="form-group">
+                <label for="prod-price">Unit Price ($) *</label>
+                <input id="prod-price" type="number" min="0" step="0.01" placeholder="0.00" required />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="prod-supplier">Supplier *</label>
+              <input id="prod-supplier" type="text" placeholder="e.g. Apex Hardware Ltd." required maxlength="100" />
+            </div>
+
+            <div class="form-group">
+              <label for="prod-description">Description</label>
+              <textarea id="prod-description" rows="2" placeholder="Optional notes or specifications..." maxlength="255"></textarea>
+            </div>
+
+            <div class="form-actions">
+              <button id="save-product-btn" type="submit" class="btn btn-primary">Add Product</button>
+              <button id="cancel-edit-btn" type="button" class="btn btn-secondary hidden">Cancel Edit</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Category Breakdown Card -->
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Category Breakdown</h2>
+          </div>
+          <div id="category-breakdown" class="category-list">
+            <p class="muted-text">No category data yet.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inventory Table Panel -->
+      <div class="right-column">
+        <div class="panel table-panel">
+          <div class="panel-header table-header">
+            <div>
+              <h2>Inventory Records</h2>
+              <p class="panel-subtitle">Live records retrieved from MySQL using <code>PreparedStatement</code> &amp; <code>ResultSet</code></p>
+            </div>
+            <div class="table-filters">
+              <input id="search-input" type="search" placeholder="Search SKU, name, supplier..." aria-label="Search products" />
+              <select id="filter-category" aria-label="Filter by category">
+                <option value="ALL">All Categories</option>
+                <option value="Electronics">Electronics</option>
+                <option value="Office Supplies">Office Supplies</option>
+                <option value="Furniture">Furniture</option>
+                <option value="Networking">Networking</option>
+                <option value="Accessories">Accessories</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="inventory-table">
+              <thead>
+                <tr>
+                  <th>SKU</th>
+                  <th>Product</th>
+                  <th>Category</th>
+                  <th>Supplier</th>
+                  <th class="num">Qty</th>
+                  <th class="num">Unit Price</th>
+                  <th class="num">Total Value</th>
+                  <th>Status</th>
+                  <th class="actions-col">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="products-tbody">
+                <tr>
+                  <td colspan="9" class="empty-cell">Loading inventory from MySQL...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="delete-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+    <div class="modal-card">
+      <h3 id="delete-modal-title">Delete Product</h3>
+      <p id="delete-modal-message">Are you sure you want to delete this product from MySQL?</p>
+      <div class="modal-actions">
+        <button id="cancel-delete-btn" type="button" class="btn btn-secondary">Cancel</button>
+        <button id="confirm-delete-btn" type="button" class="btn btn-danger">Delete Record</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
