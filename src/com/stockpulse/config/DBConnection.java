@@ -63,7 +63,7 @@ public class DBConnection {
             String port = firstNonBlankEnv("MYSQLPORT", "MYSQL_PORT");
             String resolvedPort = (port != null) ? port : "3306";
             String dbName = getDbName();
-            return "jdbc:mysql://" + railwayHost + ":" + resolvedPort + "/" + dbName + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
+            return "jdbc:mysql://" + railwayHost + ":" + resolvedPort + "/" + dbName + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectTimeout=5000";
         }
         String mysqlUrl = firstNonBlankEnv("MYSQL_URL", "MYSQL_PUBLIC_URL", "DATABASE_URL");
         if (mysqlUrl != null && mysqlUrl.startsWith("mysql://")) {
@@ -73,7 +73,7 @@ public class DBConnection {
                 int port = uri.getPort() > 0 ? uri.getPort() : 3306;
                 String path = uri.getPath();
                 String db = (path != null && path.length() > 1) ? path.substring(1) : getDbName();
-                return "jdbc:mysql://" + host + ":" + port + "/" + db + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
+                return "jdbc:mysql://" + host + ":" + port + "/" + db + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&connectTimeout=5000";
             } catch (Exception ignored) {
             }
         }
@@ -139,6 +139,8 @@ public class DBConnection {
         if (env != null) return env;
         env = System.getenv("MYSQL_PASSWORD");
         if (env != null) return env;
+        env = System.getenv("MYSQL_ROOT_PASSWORD");
+        if (env != null) return env;
         env = System.getenv("DB_PASSWORD");
         if (env != null) return env;
 
@@ -171,11 +173,51 @@ public class DBConnection {
         }
     }
 
+    private static volatile boolean schemaInitialized = false;
+    private static volatile String lastConnectionError = "";
+
+    public static String getLastConnectionError() {
+        return lastConnectionError;
+    }
+
+    public static String getSanitizedTarget() {
+        String url = getUrl();
+        int q = url.indexOf('?');
+        return q > 0 ? url.substring(0, q) : url;
+    }
+
     /**
      * Opens and returns a JDBC Connection to the configured MySQL database.
      */
     public static Connection getConnection() throws SQLException {
         return DriverManager.getConnection(getUrl(), getUser(), getPassword());
+    }
+
+    /**
+     * Checks live database connectivity and lazily initializes schema if startup attempt failed.
+     */
+    public static boolean testConnection() {
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT 1")) {
+            boolean ok = rs.next() && rs.getInt(1) == 1;
+            if (ok) {
+                lastConnectionError = "";
+                if (!schemaInitialized) {
+                    try {
+                        initializeDatabase();
+                        schemaInitialized = true;
+                    } catch (SQLException e) {
+                        lastConnectionError = "Connected, schema init error: " + e.getMessage();
+                        return false;
+                    }
+                }
+            }
+            return ok;
+        } catch (SQLException e) {
+            lastConnectionError = e.getMessage();
+            return false;
+        }
     }
 
     /**
@@ -248,23 +290,12 @@ public class DBConnection {
                     );
                 }
             }
+            schemaInitialized = true;
+            lastConnectionError = "";
         }
     }
 
     private static boolean isBlank(String s) {
         return s == null || s.trim().isEmpty();
-    }
-
-    /**
-     * Checks live database connectivity with a simple Statement query.
-     */
-    public static boolean testConnection() {
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT 1")) {
-            return rs.next() && rs.getInt(1) == 1;
-        } catch (SQLException e) {
-            return false;
-        }
     }
 }

@@ -79,7 +79,13 @@ public class ApiHandler implements HttpHandler {
 
     private void handleHealth(HttpExchange exchange) throws IOException {
         boolean dbUp = DBConnection.testConnection();
-        String json = "{\"success\":true,\"databaseConnected\":" + dbUp + "}";
+        String json = "{"
+            + "\"success\":true,"
+            + "\"databaseConnected\":" + dbUp + ","
+            + "\"target\":" + JsonUtil.quote(DBConnection.getSanitizedTarget()) + ","
+            + "\"user\":" + JsonUtil.quote(DBConnection.getUser()) + ","
+            + "\"error\":" + JsonUtil.quote(DBConnection.getLastConnectionError())
+            + "}";
         sendJson(exchange, dbUp ? 200 : 503, json);
     }
 

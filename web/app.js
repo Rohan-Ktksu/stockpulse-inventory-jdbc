@@ -113,9 +113,15 @@ async function checkHealth() {
     if (data.databaseConnected) {
       dbStatusPill.className = "status-pill status-online";
       dbStatusText.textContent = "MySQL Connected";
+      dbStatusPill.title = `Connected to ${data.target || "MySQL"}`;
     } else {
       dbStatusPill.className = "status-pill status-offline";
       dbStatusText.textContent = "MySQL Disconnected";
+      const detail = data.error ? `${data.error} (Target: ${data.target}, User: ${data.user})` : "Database unreachable";
+      dbStatusPill.title = detail;
+      if (!state.token) {
+        showAuthAlert(`MySQL connection issue: ${detail}`, "error");
+      }
     }
   } catch {
     dbStatusPill.className = "status-pill status-offline";
