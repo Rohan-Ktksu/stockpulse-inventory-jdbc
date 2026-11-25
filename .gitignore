@@ -1,0 +1,6 @@
+out/
+*.class
+sources.txt
+lib/*.jar
+.DS_Store
+Thumbs.db
