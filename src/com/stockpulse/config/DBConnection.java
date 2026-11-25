@@ -3,6 +3,7 @@ package com.stockpulse.config;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -42,27 +43,49 @@ public class DBConnection {
         }
     }
 
+    private static String firstNonBlankEnv(String... keys) {
+        for (String key : keys) {
+            String val = System.getenv(key);
+            if (!isBlank(val)) {
+                return val.trim();
+            }
+        }
+        return null;
+    }
+
     public static String getUrl() {
-        String env = System.getenv("STOCKPULSE_DB_URL");
-        if (env != null && !env.trim().isEmpty()) {
-            return env.trim();
+        String env = firstNonBlankEnv("STOCKPULSE_DB_URL");
+        if (env != null) {
+            return env;
         }
-        String railwayHost = System.getenv("MYSQLHOST");
-        if (railwayHost != null && !railwayHost.trim().isEmpty()) {
-            String port = System.getenv("MYSQLPORT");
-            String resolvedPort = (port != null && !port.trim().isEmpty()) ? port.trim() : "3306";
+        String railwayHost = firstNonBlankEnv("MYSQLHOST", "MYSQL_HOST");
+        if (railwayHost != null) {
+            String port = firstNonBlankEnv("MYSQLPORT", "MYSQL_PORT");
+            String resolvedPort = (port != null) ? port : "3306";
             String dbName = getDbName();
-            return "jdbc:mysql://" + railwayHost.trim() + ":" + resolvedPort + "/" + dbName + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
+            return "jdbc:mysql://" + railwayHost + ":" + resolvedPort + "/" + dbName + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
         }
-        String host = System.getenv("DB_HOST");
-        String dbName = System.getenv("DB_NAME");
-        if (host != null && !host.trim().isEmpty()) {
-            String port = System.getenv("DB_PORT");
-            String resolvedPort = (port != null && !port.trim().isEmpty()) ? port.trim() : "3306";
-            String resolvedDb = (dbName != null && !dbName.trim().isEmpty()) ? dbName.trim() : getDbName();
-            String sslMode = System.getenv("DB_SSL_MODE");
-            String sslParam = (sslMode != null && !sslMode.trim().isEmpty()) ? "sslMode=" + sslMode.trim() : "useSSL=false&allowPublicKeyRetrieval=true";
-            return "jdbc:mysql://" + host.trim() + ":" + resolvedPort + "/" + resolvedDb + "?" + sslParam + "&serverTimezone=UTC";
+        String mysqlUrl = firstNonBlankEnv("MYSQL_URL", "MYSQL_PUBLIC_URL", "DATABASE_URL");
+        if (mysqlUrl != null && mysqlUrl.startsWith("mysql://")) {
+            try {
+                URI uri = URI.create(mysqlUrl);
+                String host = uri.getHost();
+                int port = uri.getPort() > 0 ? uri.getPort() : 3306;
+                String path = uri.getPath();
+                String db = (path != null && path.length() > 1) ? path.substring(1) : getDbName();
+                return "jdbc:mysql://" + host + ":" + port + "/" + db + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
+            } catch (Exception ignored) {
+            }
+        }
+        String host = firstNonBlankEnv("DB_HOST");
+        String dbName = firstNonBlankEnv("DB_NAME");
+        if (host != null) {
+            String port = firstNonBlankEnv("DB_PORT");
+            String resolvedPort = (port != null) ? port : "3306";
+            String resolvedDb = (dbName != null) ? dbName : getDbName();
+            String sslMode = firstNonBlankEnv("DB_SSL_MODE");
+            String sslParam = (sslMode != null) ? "sslMode=" + sslMode : "useSSL=false&allowPublicKeyRetrieval=true";
+            return "jdbc:mysql://" + host + ":" + resolvedPort + "/" + resolvedDb + "?" + sslParam + "&serverTimezone=UTC";
         }
         return PROPS.getProperty(
             "db.url",
@@ -71,9 +94,9 @@ public class DBConnection {
     }
 
     public static String getBaseUrl() {
-        String env = System.getenv("STOCKPULSE_DB_BASE_URL");
-        if (env != null && !env.trim().isEmpty()) {
-            return env.trim();
+        String env = firstNonBlankEnv("STOCKPULSE_DB_BASE_URL");
+        if (env != null) {
+            return env;
         }
         return PROPS.getProperty(
             "db.baseUrl",
@@ -82,43 +105,52 @@ public class DBConnection {
     }
 
     public static String getDbName() {
-        String railwayDb = System.getenv("MYSQLDATABASE");
-        if (railwayDb != null && !railwayDb.trim().isEmpty()) {
-            return railwayDb.trim().replaceAll("[^a-zA-Z0-9_]", "");
+        String railwayDb = firstNonBlankEnv("MYSQLDATABASE", "MYSQL_DATABASE");
+        if (railwayDb != null) {
+            return railwayDb.replaceAll("[^a-zA-Z0-9_]", "");
         }
-        String env = System.getenv("DB_NAME");
-        String raw = (env != null && !env.trim().isEmpty()) ? env.trim() : PROPS.getProperty("db.name", "stockpulse_db");
+        String env = firstNonBlankEnv("DB_NAME");
+        String raw = (env != null) ? env : PROPS.getProperty("db.name", "stockpulse_db");
         return raw.replaceAll("[^a-zA-Z0-9_]", "");
     }
 
     public static String getUser() {
-        String env = System.getenv("STOCKPULSE_DB_USER");
-        if (env != null && !env.trim().isEmpty()) {
-            return env.trim();
+        String env = firstNonBlankEnv("STOCKPULSE_DB_USER", "MYSQLUSER", "MYSQL_USER", "DB_USER");
+        if (env != null) {
+            return env;
         }
-        String railwayUser = System.getenv("MYSQLUSER");
-        if (railwayUser != null && !railwayUser.trim().isEmpty()) {
-            return railwayUser.trim();
-        }
-        String dbUser = System.getenv("DB_USER");
-        if (dbUser != null && !dbUser.trim().isEmpty()) {
-            return dbUser.trim();
+        String mysqlUrl = firstNonBlankEnv("MYSQL_URL", "MYSQL_PUBLIC_URL", "DATABASE_URL");
+        if (mysqlUrl != null && mysqlUrl.startsWith("mysql://")) {
+            try {
+                String userInfo = URI.create(mysqlUrl).getUserInfo();
+                if (userInfo != null && userInfo.contains(":")) {
+                    return userInfo.split(":", 2)[0];
+                }
+            } catch (Exception ignored) {
+            }
         }
         return PROPS.getProperty("db.user", "root");
     }
 
     public static String getPassword() {
         String env = System.getenv("STOCKPULSE_DB_PASSWORD");
-        if (env != null) {
-            return env;
-        }
-        String railwayPass = System.getenv("MYSQLPASSWORD");
-        if (railwayPass != null) {
-            return railwayPass;
-        }
-        String dbPass = System.getenv("DB_PASSWORD");
-        if (dbPass != null) {
-            return dbPass;
+        if (env != null) return env;
+        env = System.getenv("MYSQLPASSWORD");
+        if (env != null) return env;
+        env = System.getenv("MYSQL_PASSWORD");
+        if (env != null) return env;
+        env = System.getenv("DB_PASSWORD");
+        if (env != null) return env;
+
+        String mysqlUrl = firstNonBlankEnv("MYSQL_URL", "MYSQL_PUBLIC_URL", "DATABASE_URL");
+        if (mysqlUrl != null && mysqlUrl.startsWith("mysql://")) {
+            try {
+                String userInfo = URI.create(mysqlUrl).getUserInfo();
+                if (userInfo != null && userInfo.contains(":")) {
+                    return userInfo.split(":", 2)[1];
+                }
+            } catch (Exception ignored) {
+            }
         }
         return PROPS.getProperty("db.password", "root");
     }
@@ -154,10 +186,11 @@ public class DBConnection {
         String dbName = getDbName();
 
         // Step 1: When connecting locally (no cloud host override), ensure database exists
-        String customUrl = System.getenv("STOCKPULSE_DB_URL");
-        String railwayHost = System.getenv("MYSQLHOST");
-        String customHost = System.getenv("DB_HOST");
-        if (isBlank(customUrl) && isBlank(railwayHost) && isBlank(customHost)) {
+        String cloudOverride = firstNonBlankEnv(
+            "STOCKPULSE_DB_URL", "MYSQLHOST", "MYSQL_HOST",
+            "MYSQL_URL", "MYSQL_PUBLIC_URL", "DATABASE_URL", "DB_HOST"
+        );
+        if (cloudOverride == null) {
             try (Connection baseConn = DriverManager.getConnection(getBaseUrl(), getUser(), getPassword());
                  Statement stmt = baseConn.createStatement()) {
                 stmt.executeUpdate(
