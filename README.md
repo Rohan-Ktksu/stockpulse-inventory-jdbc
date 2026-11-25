@@ -65,6 +65,19 @@ inventory-management-jdbc/
 4. **Open in Browser**:
    Visit `http://localhost:8080`, register a new user account, and manage your inventory!
 
+## Deploying on Railway (Recommended — Built-in Managed MySQL)
+Railway includes managed MySQL in the same project, so you don't need an external database:
+
+1. Open [Railway](https://railway.com), create a **New Project → Deploy from GitHub Repo**, and select `Rohan-Ktksu/stockpulse-inventory-jdbc` (`railway.toml` and `Dockerfile` are detected automatically).
+2. Inside the same Railway project, click **+ New → Database → Add MySQL**.
+3. Open your Java web service **Variables** tab and add variable references from the MySQL service:
+   - `MYSQLHOST=${{MySQL.MYSQLHOST}}`
+   - `MYSQLPORT=${{MySQL.MYSQLPORT}}`
+   - `MYSQLDATABASE=${{MySQL.MYSQLDATABASE}}`
+   - `MYSQLUSER=${{MySQL.MYSQLUSER}}`
+   - `MYSQLPASSWORD=${{MySQL.MYSQLPASSWORD}}`
+4. Railway injects `PORT` and redeploys automatically. Generate a public domain under **Settings → Networking** to access the app!
+
 ## Deploying to GitHub & Render
 This repo includes `Dockerfile`, `render.yaml`, and `.gitignore` so it deploys directly on Render without Maven:
 
